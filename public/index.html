@@ -1,0 +1,168 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Comparador</title>
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/prismjs/themes/prism-tomorrow.css"
+    />
+    <script src="https://cdn.jsdelivr.net/npm/prismjs/prism.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/prismjs/components/prism-markup.min.js"></script>
+    <script type="module" src="./assets/browser-utils.js" defer></script>
+    <style>
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+        font: 14px sans-serif;
+      }
+      body {
+        display: flex;
+        flex-direction: column;
+      }
+      #panes {
+        flex: 1;
+        display: flex;
+        gap: 1rem;
+        padding: 1rem;
+      }
+      .panel {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        border: 2px solid rgb(21, 120, 187);
+        /* padding-right: 2rem; */
+        padding-bottom: 2.5rem;
+      }
+      .head {
+        display: flex;
+        justify-content: space-between;
+        background: #333;
+        color: #fff;
+        padding: 4px;
+      }
+      .view {
+        flex: 1;
+        position: relative;
+      }
+
+      pre {
+        position: absolute;
+        inset: 0;
+        margin: 0;
+        top: -7px;
+        width: calc(100% - 28px);
+        height: calc(100% + 7px);
+        border: 0;
+      }
+
+      iframe {
+        position: absolute;
+        inset: 0;
+        margin: 0;
+
+        width: 100%;
+        height: calc(100% + 35px);
+        border: 0;
+      }
+      .hidden {
+        display: none;
+      }
+      #bottom {
+        height: 30%;
+        display: flex;
+      }
+      textarea {
+        width: 100%;
+        height: 100%;
+      }
+
+      .editor {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .editor textarea {
+        flex: 1;
+        width: 100%;
+        box-sizing: border-box;
+      }
+
+      .editor button {
+        margin-top: 6px;
+        flex-shrink: 0;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="panes"></div>
+    <div><button id="compare">Comparar</button><span id="result"></span></div>
+    <div id="bottom">
+      <div class="editor">
+        <textarea id="js">function transform(root){return root;}</textarea>
+        <button id="run">Compilar</button>
+      </div>
+
+      <div class="editor">
+        <textarea id="css" placeholder="CSS"></textarea>
+      </div>
+    </div>
+    <script>
+      const docs = ["", ""];
+      function make(i) {
+        let p = document.createElement("div");
+        p.className = "panel";
+        p.innerHTML = `<div class=head>HTML ${i + 1}<select><option>Código</option><option>Preview</option></select></div><div class=view><pre><code class='language-markup'></code></pre><iframe class='hidden'></iframe></div>`;
+        panes.appendChild(p);
+        let sel = p.querySelector("select"),
+          pre = p.querySelector("pre"),
+          fr = p.querySelector("iframe");
+        sel.onchange = () => {
+          pre.classList.toggle("hidden", sel.selectedIndex);
+          fr.classList.toggle("hidden", !sel.selectedIndex);
+        };
+        p.ondragover = (e) => e.preventDefault();
+        p.ondrop = (e) => {
+          e.preventDefault();
+          let f = e.dataTransfer.files[0];
+          let r = new FileReader();
+          r.onload = (x) => {
+            docs[i] = x.target.result;
+            render(i);
+          };
+          r.readAsText(f);
+        };
+      }
+      make(0);
+      make(1);
+      function render(i) {
+        let p = panes.children[i];
+        let c = p.querySelector("code");
+        c.textContent = docs[i];
+        Prism.highlightElement(c);
+        p.querySelector("iframe").srcdoc =
+          "<style>" + css.value + "</style>" + docs[i];
+      }
+      css.oninput = () => {
+        render(0);
+        render(1);
+      };
+      compare.onclick = () =>
+        (result.textContent =
+          docs[0].trim() == docs[1].trim() ? " Iguales" : " Distintos");
+      run.onclick = () => {
+        let tf = new Function(js.value + ";return transform")();
+        for (let i = 0; i < 2; i++) {
+          if (!docs[i]) continue;
+          let d = document.createElement("div");
+          d.innerHTML = docs[i];
+          let r = tf(d.firstElementChild || d) || d;
+          docs[i] = r.outerHTML || r.innerHTML;
+          render(i);
+        }
+      };
+    </script>
+  </body>
+</html>

@@ -1,0 +1,34 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><title>Comparador HTML</title>
+<link href="https://cdn.jsdelivr.net/npm/prismjs/themes/prism-tomorrow.css" rel="stylesheet"/>
+<script src="https://cdn.jsdelivr.net/npm/prismjs/prism.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs/components/prism-markup.min.js"></script>
+<style>
+html,body{margin:0;height:100%;font-family:Arial}#top{display:flex;height:70%}.panel{flex:1;display:flex;flex-direction:column;border-right:1px solid #555}.drop{padding:8px;background:#222;color:#fff;text-align:center}.code{flex:1;overflow:auto;background:#1e1e1e}.preview{flex:1;border:0}.bottom{height:30%;display:flex}.ed{flex:1;display:flex;flex-direction:column}textarea{flex:1;width:100%}button{padding:8px}
+</style></head><body>
+<div id=top>
+<div class=panel data-i=0><div class=drop>Arrastre HTML aquí</div><pre class=code><code class="language-markup"></code></pre><iframe class=preview></iframe></div>
+<div class=panel data-i=1><div class=drop>Arrastre HTML aquí</div><pre class=code><code class="language-markup"></code></pre><iframe class=preview></iframe></div>
+</div>
+<div><button id=cmp>Comparar</button> <span id=res></span></div>
+<div class=bottom><div class=ed><b>transform(root)</b><textarea id=js>function transform(root){return root;}</textarea><button id=run>Compilar</button></div><div class=ed><b>CSS</b><textarea id=css></textarea></div></div>
+<script>
+const docs=[null,null];
+function fmt(s){let d=document.createElement('div');d.innerHTML=s.trim();return d.innerHTML;}
+function render(i){
+ if(!docs[i])return;
+ let code=document.querySelectorAll('code')[i];
+ code.textContent=fmt(docs[i]);Prism.highlightElement(code);
+ let css=document.getElementById('css').value;
+ document.querySelectorAll('iframe')[i].srcdoc="<style>"+css+"</style>"+docs[i];
+}
+document.querySelectorAll('.panel').forEach((p,idx)=>{
+ p.ondragover=e=>e.preventDefault();
+ p.ondrop=e=>{e.preventDefault();let f=e.dataTransfer.files[0];let r=new FileReader();r.onload=x=>{docs[idx]=x.target.result;render(idx)};r.readAsText(f);}
+});
+cmp.onclick=()=>{res.textContent=(fmt(docs[0]||'')===fmt(docs[1]||''))?"Iguales":"Distintos";}
+run.onclick=()=>{
+ let fn;try{fn=new Function(document.getElementById('js').value+";return transform;")();}catch(e){alert(e);return;}
+ for(let i=0;i<2;i++){if(!docs[i])continue;let t=document.createElement('template');t.innerHTML=docs[i];let root=t.content.firstElementChild||document.createElement('div');root=fn(root)||root;docs[i]=root.outerHTML;render(i);}
+};
+css.oninput=()=>{render(0);render(1);}
+</script></body></html>
