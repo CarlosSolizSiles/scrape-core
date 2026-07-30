@@ -2,8 +2,8 @@ const sleep = async (timeout: number) =>
   new Promise<void>((resolve) => setTimeout(resolve, timeout));
 
 const humanDelay = () => {
-  const min = 4000;
-  const max = 12000;
+  const min = 2000;
+  const max = 5000;
   return Math.floor(min + (max - min) * Math.pow(Math.random(), 0.6));
 };
 

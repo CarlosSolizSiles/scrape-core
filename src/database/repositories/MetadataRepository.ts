@@ -1,6 +1,6 @@
-import type { Metadata } from "@/models/Metadata";
-import { db } from "../client";
-import { isObjectEmpty } from "@/utils/isObjectEmpty";
+import type { Metadata } from "@/models/Metadata.js";
+import { db } from "../client.js";
+import { isObjectEmpty } from "@/lib/isObjectEmpty.js";
 
 export function getMetadata<T = Metadata>() {
   const row = db

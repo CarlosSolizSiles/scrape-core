@@ -22,22 +22,22 @@ export async function navigate(
   for (let i = 1; i <= retries; i++) {
     try {
       // Ejecuta la limpieza y asignación de cookies en paralelo
-      await context.clearCookies();
+      // await context.clearCookies();
 
-      if (cookies.length) {
-        await context.addCookies(
-          cookies.map(({ nombre, valor }) => ({
-            name: nombre,
-            value: valor,
-            url: new URL(manager.baseURL).toString(),
-          })),
-        );
-      }
+      // if (cookies.length) {
+      //   await context.addCookies(
+      //     cookies.map(({ nombre, valor }) => ({
+      //       name: nombre,
+      //       value: valor,
+      //       url: new URL(manager.baseURL).toString(),
+      //     })),
+      //   );
+      // }
 
       // Espera a que la página cargue por completo (domcontentloaded o networkidle)
       await page.goto(url, {
         timeout: 15000,
-        waitUntil: "domcontentloaded",
+        // waitUntil: "domcontentloaded",
       });
 
       return true;

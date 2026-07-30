@@ -21,14 +21,4 @@ export async function initializePlaywright() {
   const pid = addon.findPidByPartialTitle("about:blank");
 
   addon.setWindowVisible(pid, state.isHeadless);
-
-  await manager.page.route("*/", (route) => {
-    const type = route.request().resourceType();
-
-    if (type === "image" || type === "font" || type === "media") {
-      return route.abort();
-    }
-
-    route.continue();
-  });
 }

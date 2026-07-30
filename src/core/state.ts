@@ -10,7 +10,7 @@ interface AppState {
 
 export const state: AppState = {
   startedAt: Date.now(),
-  isHeadless: !false,
+  isHeadless: false,
   browser: new BrowserManager(
     process.env.BASE_URL || "https://www.ryuugames.com/",
   ),

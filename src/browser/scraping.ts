@@ -5,13 +5,28 @@ import { extractPost } from "./extract/post.js";
 import { queue } from "./queue.js";
 import { existsHtml, readHtml } from "@/lib/fs.js";
 import { humanDelay, sleep } from "@/lib/time.js";
+import { saveDiscoveredPosts } from "@/database/repositories/PostRepository.js";
 
 export async function scraping() {
   const { page } = state.browser.getManager();
 
+  await page.route("**/*", (route) => {
+    const type = route.request().resourceType();
+
+    if (
+      ["image", "font", "media", "script", "stylesheet", "other"].includes(type)
+    ) {
+      return route.abort();
+    }
+
+    console.log(type, route.request().method(), route.request().url());
+
+    return route.continue();
+  });
+
   const scrapingState: { lastPage: number | null; currentPage: number } = {
     lastPage: null,
-    currentPage: 602,
+    currentPage: 1,
   };
 
   // console.log("==================================================");
@@ -45,89 +60,91 @@ export async function scraping() {
     //   `✅ Se encontraron ${posts.length} publicaciones (última página: ${lastPage}).`,
     // );
 
-    let isTimeoutError = false;
+    // let isTimeoutError = false;
 
-    for (const post of posts) {
-      // console.log("");
-      // console.log(`📝 Procesando publicación: ${post.id}`);
+    saveDiscoveredPosts(posts);
 
-      let data;
+    // for (const post of posts) {
+    //   // console.log("");
+    //   // console.log(`📝 Procesando publicación: ${post.id}`);
 
-      if (await existsHtml(post.id, post.updatedAt)) {
-        // console.log(`⏩ El archivo HTML ya existe. Se omite la extracción.`);
+    //   let data;
 
-        data = (await readHtml(post.id, post.updatedAt))!;
+    //   if (await existsHtml(post.id, post.updatedAt)) {
+    //     // console.log(`⏩ El archivo HTML ya existe. Se omite la extracción.`);
 
-        continue;
-      } else {
-        // console.log(`🌐 Navegando a /${post.id}/ ...`);
+    //     data = (await readHtml(post.id, post.updatedAt))!;
 
-        const success = await navigate(`/${post.id}/`);
+    //     continue;
+    //   } else {
+    //     // console.log(`🌐 Navegando a /${post.id}/ ...`);
 
-        if (!success) {
-          // console.log(
-          //   "⚠️ Timeout detectado durante la navegación. Se volverá a intentar la página actual.",
-          // );
+    //     const success = await navigate(`/${post.id}/`);
 
-          isTimeoutError = true;
-          break;
-        }
+    //     if (!success) {
+    //       // console.log(
+    //       //   "⚠️ Timeout detectado durante la navegación. Se volverá a intentar la página actual.",
+    //       // );
 
-        // console.log("📥 Extrayendo el contenido de la publicación...");
+    //       isTimeoutError = true;
+    //       break;
+    //     }
 
-        data = await extractPost();
+    //     // console.log("📥 Extrayendo el contenido de la publicación...");
 
-        if (!data) {
-          // console.log(
-          //   "⚠️ No se pudo extraer el contenido de la publicación. Se omite.",
-          // );
+    //     data = await extractPost();
 
-          continue;
-        }
+    //     if (!data) {
+    //       // console.log(
+    //       //   "⚠️ No se pudo extraer el contenido de la publicación. Se omite.",
+    //       // );
 
-        // console.log(
-        //   `✅ Contenido extraído correctamente (${data.kb.toFixed(
-        //     2,
-        //   )} KB - ${data.chars} caracteres).`,
-        // );
+    //       continue;
+    //     }
 
-        const delay = humanDelay() / 2;
+    //     // console.log(
+    //     //   `✅ Contenido extraído correctamente (${data.kb.toFixed(
+    //     //     2,
+    //     //   )} KB - ${data.chars} caracteres).`,
+    //     // );
 
-        // console.log(
-        //   `😴 Esperando ${(delay / 1000).toFixed(
-        //     2,
-        //   )} segundos antes de continuar...`,
-        // );
+    //     const delay = humanDelay() / 2;
 
-        await sleep(delay);
-      }
+    //     // console.log(
+    //     //   `😴 Esperando ${(delay / 1000).toFixed(
+    //     //     2,
+    //     //   )} segundos antes de continuar...`,
+    //     // );
 
-      // console.log("📦 Añadiendo publicación a la cola de procesamiento...");
+    //     await sleep(delay);
+    //   }
 
-      queue.push({
-        ...post,
-        data,
-      });
+    //   // console.log("📦 Añadiendo publicación a la cola de procesamiento...");
 
-      // console.log(`✅ Publicación ${post.id} añadida correctamente a la cola.`);
-    }
+    //   queue.push({
+    //     ...post,
+    //     data,
+    //   });
 
-    if (isTimeoutError) {
-      // console.log("");
-      // console.log(
-      //   `🔄 Reintentando la página ${scrapingState.currentPage} debido al timeout...`,
-      // );
+    //   // console.log(`✅ Publicación ${post.id} añadida correctamente a la cola.`);
+    // }
 
-      isTimeoutError = false;
-      continue;
-    }
+    // if (isTimeoutError) {
+    //   // console.log("");
+    //   // console.log(
+    //   //   `🔄 Reintentando la página ${scrapingState.currentPage} debido al timeout...`,
+    //   // );
+
+    //   isTimeoutError = false;
+    //   continue;
+    // }
 
     // console.log("");
     // console.log(
     //   `✅ Página ${scrapingState.currentPage} procesada correctamente.`,
     // );
 
-    const delay = humanDelay();
+    const delay = humanDelay() / 2;
 
     // console.log(
     //   `😴 Esperando ${(delay / 1000).toFixed(
