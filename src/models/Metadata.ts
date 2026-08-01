@@ -8,4 +8,6 @@ export interface Metadata {
   lastProcessedPost: Timestamp;
 
   lastUpdatedPost: Timestamp;
+
+  tempFirstUpdatedPost: Timestamp;
 }

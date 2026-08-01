@@ -47,6 +47,7 @@ export const initializeMetadata = () => {
       isRunning: false,
       currentPage: 0,
       lastUpdatedPost: 0,
+      tempFirstUpdatedPost: 0,
     });
   }
 };

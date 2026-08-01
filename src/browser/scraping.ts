@@ -14,22 +14,41 @@ import type { Timestamp } from "@/models/defineType.js";
 
 type ScrapingState = {
   latestKnownPostTimestamp: Timestamp;
-  currentLastPostUpdate: Timestamp | null;
+  currentLastPostUpdate: Timestamp;
   totalPages: number | null;
   currentPage: number;
+  tempFirstUpdatedPost: Timestamp;
 };
 
-function getNewPosts(pagePosts: Post[], latestKnownPostTimestamp: number) {
-  const firstNewPostIndex = pagePosts.findIndex(
-    (post) =>
-      !latestKnownPostTimestamp || post.updatedAt < latestKnownPostTimestamp,
-  );
+type GetNewPostsResult = {
+  posts: Post[];
+  reachedLimit: boolean;
+};
 
-  if (!latestKnownPostTimestamp && pagePosts[0]) {
-    latestKnownPostTimestamp = pagePosts[0].updatedAt;
+function getNewPosts(
+  pagePosts: Post[],
+  resumeTimestamp: number,
+  stopTimestamp: number,
+): GetNewPostsResult {
+  const posts: Post[] = [];
+  let reachedLimit = false;
+
+  for (const post of pagePosts) {
+    if (stopTimestamp && post.updatedAt <= stopTimestamp) {
+      reachedLimit = true;
+
+      break;
+    }
+
+    if (!resumeTimestamp || post.updatedAt < resumeTimestamp) {
+      posts.push(post);
+    }
   }
 
-  return firstNewPostIndex === -1 ? -1 : pagePosts.slice(firstNewPostIndex);
+  return {
+    posts,
+    reachedLimit,
+  };
 }
 
 export async function scraping() {
@@ -44,7 +63,7 @@ export async function scraping() {
       return route.abort();
     }
 
-    console.log(type, route.request().method(), route.request().url());
+    // console.log(type, route.request().method(), route.request().url());
 
     return route.continue();
   });
@@ -54,14 +73,17 @@ export async function scraping() {
     isRunning,
     lastUpdatedPost,
     lastProcessedPost,
+    tempFirstUpdatedPost,
   } = getMetadata();
 
   const scrapingState: ScrapingState = {
     totalPages: null,
+    currentLastPostUpdate: lastProcessedPost,
+
     latestKnownPostTimestamp:
       isRunning && lastUpdatedPost ? lastUpdatedPost : 0,
     currentPage: isRunning ? savedPage : 1,
-    currentLastPostUpdate: null,
+    tempFirstUpdatedPost: tempFirstUpdatedPost,
   };
 
   do {
@@ -82,25 +104,41 @@ export async function scraping() {
     const findPosts = getNewPosts(
       posts,
       scrapingState.latestKnownPostTimestamp,
+      scrapingState.currentLastPostUpdate,
     );
 
-    if (findPosts !== -1) {
-      const lastPost = posts.at(-1);
+    if (posts.length !== 18 || findPosts.posts.length !== 18) {
+      console.log(
+        `/page/${scrapingState.currentPage}/`,
+        posts.length,
+        findPosts.posts.length,
+      );
+    }
 
-      if (lastPost) {
-        scrapingState.latestKnownPostTimestamp = lastPost.updatedAt;
+    if (findPosts.posts.length) {
+      const lastPost = findPosts.posts.at(-1)!;
+
+      scrapingState.latestKnownPostTimestamp = lastPost.updatedAt;
+
+      if (!scrapingState.tempFirstUpdatedPost) {
+        scrapingState.tempFirstUpdatedPost = findPosts.posts[0]!.updatedAt;
       }
 
-      saveDiscoveredPosts(findPosts);
+      saveDiscoveredPosts(findPosts.posts);
 
       updateMetadata({
         isRunning: true,
         currentPage: scrapingState.currentPage,
         lastUpdatedPost: scrapingState.latestKnownPostTimestamp,
+        tempFirstUpdatedPost: scrapingState.tempFirstUpdatedPost,
       });
     }
 
-    const delay = humanDelay();
+    if (findPosts.reachedLimit) {
+      break;
+    }
+
+    const delay = humanDelay() * 1.25;
 
     await sleep(delay);
 
@@ -111,10 +149,11 @@ export async function scraping() {
   );
 
   updateMetadata({
-    lastProcessedPost: 0,
+    lastProcessedPost: scrapingState.tempFirstUpdatedPost,
     isRunning: false,
     currentPage: 0,
     lastUpdatedPost: 0,
+    tempFirstUpdatedPost: 0,
   });
   // console.log("");
   // console.log("==================================================");
