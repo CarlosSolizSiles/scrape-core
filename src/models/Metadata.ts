@@ -1,9 +1,11 @@
+import type { Timestamp } from "./defineType.js";
+
 export interface Metadata {
   isRunning: boolean;
 
   currentPage: number;
 
-  lastProcessedPost?: string;
+  lastProcessedPost: Timestamp;
 
-  lastUpdatedPost?: string;
+  lastUpdatedPost: Timestamp;
 }

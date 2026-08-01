@@ -43,10 +43,10 @@ export const getLastProcessedPost = () => {
 export const initializeMetadata = () => {
   if (isObjectEmpty(getMetadata())) {
     updateMetadata({
-      lastProcessedPost: "",
+      lastProcessedPost: 0,
       isRunning: false,
       currentPage: 0,
-      lastUpdatedPost: "",
+      lastUpdatedPost: 0,
     });
   }
 };

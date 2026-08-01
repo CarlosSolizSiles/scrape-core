@@ -1,12 +1,36 @@
 import { state } from "@/core/state.js";
 import { navigate } from "./navigate.js";
-import { extractPaginationPageData } from "./extract/paginationPageData.js";
-import { extractPost } from "./extract/post.js";
-import { queue } from "./queue.js";
-import { existsHtml, readHtml } from "@/lib/fs.js";
+import {
+  extractPaginationPageData,
+  type Post,
+} from "./extract/paginationPageData.js";
 import { humanDelay, sleep } from "@/lib/time.js";
 import { saveDiscoveredPosts } from "@/database/repositories/PostRepository.js";
-import { getMetadata } from "@/database/repositories/MetadataRepository.js";
+import {
+  getMetadata,
+  updateMetadata,
+} from "@/database/repositories/MetadataRepository.js";
+import type { Timestamp } from "@/models/defineType.js";
+
+type ScrapingState = {
+  latestKnownPostTimestamp: Timestamp;
+  currentLastPostUpdate: Timestamp | null;
+  totalPages: number | null;
+  currentPage: number;
+};
+
+function getNewPosts(pagePosts: Post[], latestKnownPostTimestamp: number) {
+  const firstNewPostIndex = pagePosts.findIndex(
+    (post) =>
+      !latestKnownPostTimestamp || post.updatedAt < latestKnownPostTimestamp,
+  );
+
+  if (!latestKnownPostTimestamp && pagePosts[0]) {
+    latestKnownPostTimestamp = pagePosts[0].updatedAt;
+  }
+
+  return firstNewPostIndex === -1 ? -1 : pagePosts.slice(firstNewPostIndex);
+}
 
 export async function scraping() {
   const { page } = state.browser.getManager();
@@ -25,42 +49,75 @@ export async function scraping() {
     return route.continue();
   });
 
-  const { currentPage, isRunning, lastUpdatedPost } = getMetadata();
+  const {
+    currentPage: savedPage,
+    isRunning,
+    lastUpdatedPost,
+    lastProcessedPost,
+  } = getMetadata();
 
-  const scrapingState: { lastPage: number | null; currentPage: number } = {
-    lastPage: null,
-    currentPage: 1,
+  const scrapingState: ScrapingState = {
+    totalPages: null,
+    latestKnownPostTimestamp:
+      isRunning && lastUpdatedPost ? lastUpdatedPost : 0,
+    currentPage: isRunning ? savedPage : 1,
+    currentLastPostUpdate: null,
   };
 
   do {
     await navigate(`/page/${scrapingState.currentPage}/`);
 
-    const pageData = await extractPaginationPageData();
+    const paginationData = await extractPaginationPageData();
 
-    if (pageData === null) {
+    if (paginationData === null) {
       throw new Error(
         `No se pudieron extraer los datos de la página ${scrapingState.currentPage}.`,
       );
     }
 
-    const { lastPage, posts } = pageData;
+    const { totalPages, posts } = paginationData;
 
-    scrapingState.lastPage = lastPage;
+    scrapingState.totalPages = totalPages;
 
-    saveDiscoveredPosts(posts);
+    const findPosts = getNewPosts(
+      posts,
+      scrapingState.latestKnownPostTimestamp,
+    );
 
-    const delay = humanDelay() / 2;
+    if (findPosts !== -1) {
+      const lastPost = posts.at(-1);
+
+      if (lastPost) {
+        scrapingState.latestKnownPostTimestamp = lastPost.updatedAt;
+      }
+
+      saveDiscoveredPosts(findPosts);
+
+      updateMetadata({
+        isRunning: true,
+        currentPage: scrapingState.currentPage,
+        lastUpdatedPost: scrapingState.latestKnownPostTimestamp,
+      });
+    }
+
+    const delay = humanDelay();
 
     await sleep(delay);
 
     scrapingState.currentPage++;
   } while (
-    scrapingState.lastPage !== null &&
-    scrapingState.currentPage <= scrapingState.lastPage
+    scrapingState.totalPages !== null &&
+    scrapingState.currentPage <= scrapingState.totalPages
   );
 
+  updateMetadata({
+    lastProcessedPost: 0,
+    isRunning: false,
+    currentPage: 0,
+    lastUpdatedPost: 0,
+  });
   // console.log("");
   // console.log("==================================================");
-  // console.log("🎉 El proceso de scraping ha finalizado.");
+  console.log("🎉 El proceso de scraping ha finalizado.");
   // console.log("==================================================");
 }

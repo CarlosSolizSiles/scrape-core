@@ -8,7 +8,7 @@ export interface Post {
 
 export interface PaginationPageData {
   posts: Post[];
-  lastPage: number;
+  totalPages: number;
 }
 
 export const extractPaginationPageData =

@@ -12,17 +12,17 @@ export function EvaluatePaginationPageData() {
 
   if (!container || !pageNav) return null;
 
-  let lastPage = null;
+  let totalPages = null;
 
   for (const el of pageNav.querySelectorAll("a, span")) {
     const value = Number(el.textContent?.trim());
 
-    if (Number.isFinite(value) && (lastPage === null || value > lastPage)) {
-      lastPage = value;
+    if (Number.isFinite(value) && (totalPages === null || value > totalPages)) {
+      totalPages = value;
     }
   }
 
-  if (lastPage === null) return null;
+  if (totalPages === null) return null;
 
   /**
    * Extracts posts from a section.
@@ -62,6 +62,6 @@ export function EvaluatePaginationPageData() {
 
   return {
     posts: extractPosts(container, ".td_module_1:not([no-select])"),
-    lastPage,
+    totalPages,
   };
 }
