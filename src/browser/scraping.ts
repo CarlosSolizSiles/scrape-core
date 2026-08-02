@@ -1,22 +1,27 @@
 import { state } from "@/core/state.js";
-import { navigate } from "./navigate.js";
-import {
-  extractPaginationPageData,
-  type Post,
-} from "./extract/paginationPageData.js";
-import { humanDelay, sleep } from "@/lib/time.js";
-import { saveDiscoveredPosts } from "@/database/repositories/PostRepository.js";
+
 import {
   getMetadata,
   updateMetadata,
 } from "@/database/repositories/MetadataRepository.js";
+import { saveDiscoveredPosts } from "@/database/repositories/PostRepository.js";
+
+import { humanDelay, sleep } from "@/lib/time.js";
+
 import type { Timestamp } from "@/models/defineType.js";
 
+import {
+  extractPaginationPageData,
+  type Post,
+} from "./extract/paginationPageData.js";
+import { navigate } from "./navigate.js";
+
 type ScrapingSession = {
-  lastDiscoveredPostUpdatedAt: Timestamp;
-  totalPages: number | null;
   currentPage: number;
+  totalPages: number | null;
+
   firstDiscoveredPostUpdatedAt: Timestamp;
+  lastDiscoveredPostUpdatedAt: Timestamp;
 };
 
 type GetNewPostsResult = {
@@ -67,20 +72,20 @@ export async function scraping() {
   });
 
   const {
-    resumePage,
     isRunning,
+    resumePage,
     resumeUpdatedAt,
     processedUntilUpdatedAt,
     firstDiscoveredPostUpdatedAt,
   } = getMetadata();
 
   const session: ScrapingSession = {
+    currentPage: isRunning ? resumePage : 881,
     totalPages: null,
 
+    firstDiscoveredPostUpdatedAt,
     lastDiscoveredPostUpdatedAt:
       isRunning && resumeUpdatedAt ? resumeUpdatedAt : 0,
-    currentPage: isRunning ? resumePage : 881,
-    firstDiscoveredPostUpdatedAt,
   };
 
   do {
@@ -94,7 +99,7 @@ export async function scraping() {
       );
     }
 
-    const { totalPages, posts: pagePosts } = pageData;
+    const { posts: pagePosts, totalPages } = pageData;
 
     session.totalPages = totalPages;
 
@@ -114,13 +119,14 @@ export async function scraping() {
       console.log(pagePosts);
     }
 
-    if (newPosts.posts.length) {
+    if (newPosts.posts.length > 0) {
+      const newestDiscoveredPost = newPosts.posts[0]!;
       const oldestDiscoveredPost = newPosts.posts.at(-1)!;
 
       session.lastDiscoveredPostUpdatedAt = oldestDiscoveredPost.updatedAt;
 
       if (!session.firstDiscoveredPostUpdatedAt) {
-        session.firstDiscoveredPostUpdatedAt = newPosts.posts[0]!.updatedAt;
+        session.firstDiscoveredPostUpdatedAt = newestDiscoveredPost.updatedAt;
       }
 
       saveDiscoveredPosts(newPosts.posts);
@@ -137,9 +143,7 @@ export async function scraping() {
       break;
     }
 
-    const requestDelay = humanDelay() * 1.25;
-
-    await sleep(requestDelay);
+    await sleep(humanDelay() * 1.25);
 
     session.currentPage++;
   } while (
@@ -148,10 +152,10 @@ export async function scraping() {
   );
 
   updateMetadata({
-    processedUntilUpdatedAt: session.firstDiscoveredPostUpdatedAt,
     isRunning: false,
     resumePage: 0,
     resumeUpdatedAt: 0,
+    processedUntilUpdatedAt: session.firstDiscoveredPostUpdatedAt,
     firstDiscoveredPostUpdatedAt: 0,
   });
 
