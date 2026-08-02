@@ -12,42 +12,40 @@ import {
 } from "@/database/repositories/MetadataRepository.js";
 import type { Timestamp } from "@/models/defineType.js";
 
-type ScrapingState = {
-  latestKnownPostTimestamp: Timestamp;
-  currentLastPostUpdate: Timestamp;
+type ScrapingSession = {
+  lastDiscoveredPostUpdatedAt: Timestamp;
   totalPages: number | null;
   currentPage: number;
-  tempFirstUpdatedPost: Timestamp;
+  firstDiscoveredPostUpdatedAt: Timestamp;
 };
 
 type GetNewPostsResult = {
   posts: Post[];
-  reachedLimit: boolean;
+  reachedProcessedPosts: boolean;
 };
 
 function getNewPosts(
   pagePosts: Post[],
-  resumeTimestamp: number,
-  stopTimestamp: number,
+  resumeUpdatedAt: Timestamp,
+  processedUntilUpdatedAt: Timestamp,
 ): GetNewPostsResult {
   const posts: Post[] = [];
-  let reachedLimit = false;
+  let reachedProcessedPosts = false;
 
   for (const post of pagePosts) {
-    if (stopTimestamp && post.updatedAt <= stopTimestamp) {
-      reachedLimit = true;
-
+    if (processedUntilUpdatedAt && post.updatedAt <= processedUntilUpdatedAt) {
+      reachedProcessedPosts = true;
       break;
     }
 
-    if (!resumeTimestamp || post.updatedAt < resumeTimestamp) {
+    if (!resumeUpdatedAt || post.updatedAt < resumeUpdatedAt) {
       posts.push(post);
     }
   }
 
   return {
     posts,
-    reachedLimit,
+    reachedProcessedPosts,
   };
 }
 
@@ -55,108 +53,107 @@ export async function scraping() {
   const { page } = state.browser.getManager();
 
   await page.route("**/*", (route) => {
-    const type = route.request().resourceType();
+    const resourceType = route.request().resourceType();
 
     if (
-      ["image", "font", "media", "script", "stylesheet", "other"].includes(type)
+      ["image", "font", "media", "script", "stylesheet", "other"].includes(
+        resourceType,
+      )
     ) {
       return route.abort();
     }
-
-    // console.log(type, route.request().method(), route.request().url());
 
     return route.continue();
   });
 
   const {
-    currentPage: savedPage,
+    resumePage,
     isRunning,
-    lastUpdatedPost,
-    lastProcessedPost,
-    tempFirstUpdatedPost,
+    resumeUpdatedAt,
+    processedUntilUpdatedAt,
+    firstDiscoveredPostUpdatedAt,
   } = getMetadata();
 
-  const scrapingState: ScrapingState = {
+  const session: ScrapingSession = {
     totalPages: null,
-    currentLastPostUpdate: lastProcessedPost,
 
-    latestKnownPostTimestamp:
-      isRunning && lastUpdatedPost ? lastUpdatedPost : 0,
-    currentPage: isRunning ? savedPage : 1,
-    tempFirstUpdatedPost: tempFirstUpdatedPost,
+    lastDiscoveredPostUpdatedAt:
+      isRunning && resumeUpdatedAt ? resumeUpdatedAt : 0,
+    currentPage: isRunning ? resumePage : 881,
+    firstDiscoveredPostUpdatedAt,
   };
 
   do {
-    await navigate(`/page/${scrapingState.currentPage}/`);
+    await navigate(`/page/${session.currentPage}/`);
 
-    const paginationData = await extractPaginationPageData();
+    const pageData = await extractPaginationPageData();
 
-    if (paginationData === null) {
+    if (pageData === null) {
       throw new Error(
-        `No se pudieron extraer los datos de la página ${scrapingState.currentPage}.`,
+        `No se pudieron extraer los datos de la página ${session.currentPage}.`,
       );
     }
 
-    const { totalPages, posts } = paginationData;
+    const { totalPages, posts: pagePosts } = pageData;
 
-    scrapingState.totalPages = totalPages;
+    session.totalPages = totalPages;
 
-    const findPosts = getNewPosts(
-      posts,
-      scrapingState.latestKnownPostTimestamp,
-      scrapingState.currentLastPostUpdate,
+    const newPosts = getNewPosts(
+      pagePosts,
+      session.lastDiscoveredPostUpdatedAt,
+      processedUntilUpdatedAt,
     );
 
-    if (posts.length !== 18 || findPosts.posts.length !== 18) {
+    if (pagePosts.length !== 18 || newPosts.posts.length !== 18) {
       console.log(
-        `/page/${scrapingState.currentPage}/`,
-        posts.length,
-        findPosts.posts.length,
+        `/page/${session.currentPage}/`,
+        pagePosts.length,
+        newPosts.posts.length,
       );
+
+      console.log(pagePosts);
     }
 
-    if (findPosts.posts.length) {
-      const lastPost = findPosts.posts.at(-1)!;
+    if (newPosts.posts.length) {
+      const oldestDiscoveredPost = newPosts.posts.at(-1)!;
 
-      scrapingState.latestKnownPostTimestamp = lastPost.updatedAt;
+      session.lastDiscoveredPostUpdatedAt = oldestDiscoveredPost.updatedAt;
 
-      if (!scrapingState.tempFirstUpdatedPost) {
-        scrapingState.tempFirstUpdatedPost = findPosts.posts[0]!.updatedAt;
+      if (!session.firstDiscoveredPostUpdatedAt) {
+        session.firstDiscoveredPostUpdatedAt = newPosts.posts[0]!.updatedAt;
       }
 
-      saveDiscoveredPosts(findPosts.posts);
+      saveDiscoveredPosts(newPosts.posts);
 
       updateMetadata({
         isRunning: true,
-        currentPage: scrapingState.currentPage,
-        lastUpdatedPost: scrapingState.latestKnownPostTimestamp,
-        tempFirstUpdatedPost: scrapingState.tempFirstUpdatedPost,
+        resumePage: session.currentPage,
+        resumeUpdatedAt: session.lastDiscoveredPostUpdatedAt,
+        firstDiscoveredPostUpdatedAt: session.firstDiscoveredPostUpdatedAt,
       });
     }
 
-    if (findPosts.reachedLimit) {
+    if (newPosts.reachedProcessedPosts) {
       break;
     }
 
-    const delay = humanDelay() * 1.25;
+    const requestDelay = humanDelay() * 1.25;
 
-    await sleep(delay);
+    await sleep(requestDelay);
 
-    scrapingState.currentPage++;
+    session.currentPage++;
   } while (
-    scrapingState.totalPages !== null &&
-    scrapingState.currentPage <= scrapingState.totalPages
+    session.totalPages !== null &&
+    session.currentPage <= session.totalPages
   );
 
   updateMetadata({
-    lastProcessedPost: scrapingState.tempFirstUpdatedPost,
+    processedUntilUpdatedAt: session.firstDiscoveredPostUpdatedAt,
     isRunning: false,
-    currentPage: 0,
-    lastUpdatedPost: 0,
-    tempFirstUpdatedPost: 0,
+    resumePage: 0,
+    resumeUpdatedAt: 0,
+    firstDiscoveredPostUpdatedAt: 0,
   });
-  // console.log("");
-  // console.log("==================================================");
+
   console.log("🎉 El proceso de scraping ha finalizado.");
-  // console.log("==================================================");
 }

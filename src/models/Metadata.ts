@@ -3,11 +3,11 @@ import type { Timestamp } from "./defineType.js";
 export interface Metadata {
   isRunning: boolean;
 
-  currentPage: number;
+  resumePage: number;
 
-  lastProcessedPost: Timestamp;
+  processedUntilUpdatedAt: Timestamp;
 
-  lastUpdatedPost: Timestamp;
+  resumeUpdatedAt: Timestamp;
 
-  tempFirstUpdatedPost: Timestamp;
+  firstDiscoveredPostUpdatedAt: Timestamp;
 }

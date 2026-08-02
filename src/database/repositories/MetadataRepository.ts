@@ -34,20 +34,14 @@ export function updateMetadata(partial: Partial<Metadata>) {
   return newState;
 }
 
-export const getLastProcessedPost = () => {
-  const value = getMetadata().lastProcessedPost;
-
-  return value ? new Date(value) : undefined;
-};
-
 export const initializeMetadata = () => {
   if (isObjectEmpty(getMetadata())) {
     updateMetadata({
-      lastProcessedPost: 0,
+      processedUntilUpdatedAt: 0,
       isRunning: false,
-      currentPage: 0,
-      lastUpdatedPost: 0,
-      tempFirstUpdatedPost: 0,
+      resumePage: 0,
+      resumeUpdatedAt: 0,
+      firstDiscoveredPostUpdatedAt: 0,
     });
   }
 };
