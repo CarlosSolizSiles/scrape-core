@@ -4,7 +4,10 @@ import {
   getMetadata,
   updateMetadata,
 } from "@/database/repositories/MetadataRepository.js";
-import { saveDiscoveredPosts } from "@/database/repositories/PostRepository.js";
+import {
+  getPostsCount,
+  saveDiscoveredPosts,
+} from "@/database/repositories/PostRepository.js";
 
 import { humanDelay, sleep } from "@/lib/time.js";
 
@@ -15,6 +18,7 @@ import {
   type Post,
 } from "./extract/paginationPageData.js";
 import { navigate } from "./navigate.js";
+import fs from "node:fs";
 
 type ScrapingSession = {
   currentPage: number;
@@ -28,6 +32,19 @@ type GetNewPostsResult = {
   posts: Post[];
   reachedProcessedPosts: boolean;
 };
+
+function guardarJSON<T>(array: Array<T>, ruta: string) {
+  fs.writeFileSync(ruta, JSON.stringify(array, null, 4), "utf8");
+}
+
+function cargarJSON(ruta: string) {
+  if (!fs.existsSync(ruta)) {
+    return [];
+  }
+
+  const contenido = fs.readFileSync(ruta, "utf8");
+  return JSON.parse(contenido);
+}
 
 function getNewPosts(
   pagePosts: Post[],
@@ -43,7 +60,7 @@ function getNewPosts(
       break;
     }
 
-    if (!resumeUpdatedAt || post.updatedAt < resumeUpdatedAt) {
+    if (!resumeUpdatedAt || post.updatedAt <= resumeUpdatedAt) {
       posts.push(post);
     }
   }
@@ -80,13 +97,15 @@ export async function scraping() {
   } = getMetadata();
 
   const session: ScrapingSession = {
-    currentPage: isRunning ? resumePage : 881,
+    currentPage: isRunning ? resumePage : 1,
     totalPages: null,
 
     firstDiscoveredPostUpdatedAt,
     lastDiscoveredPostUpdatedAt:
       isRunning && resumeUpdatedAt ? resumeUpdatedAt : 0,
   };
+
+  let allPost: Post[][] = [];
 
   do {
     await navigate(`/page/${session.currentPage}/`);
@@ -109,17 +128,45 @@ export async function scraping() {
       processedUntilUpdatedAt,
     );
 
-    if (pagePosts.length !== 18 || newPosts.posts.length !== 18) {
-      console.log(
-        `/page/${session.currentPage}/`,
-        pagePosts.length,
-        newPosts.posts.length,
-      );
+    const total = getPostsCount();
 
-      console.log(pagePosts);
+    allPost.push(pagePosts);
+
+    // console.log(total);
+
+    if (pagePosts.length !== 18 || newPosts.posts.length !== 18 || total % 18) {
+      console.log(`\n📄 Página ${session.currentPage}`);
+      console.log(`Total extraídos: ${pagePosts.length}`);
+      console.log(`Nuevos: ${newPosts.posts.length}`);
+      console.log(`Descartados: ${pagePosts.length - newPosts.posts.length}`);
+      console.log(
+        `lastDiscoveredPostUpdatedAt: ${session.lastDiscoveredPostUpdatedAt}`,
+      );
+      console.log(`processedUntilUpdatedAt: ${processedUntilUpdatedAt}`);
+
+      for (const post of pagePosts) {
+        let reason = "✅ Nuevo";
+
+        if (
+          processedUntilUpdatedAt &&
+          post.updatedAt <= processedUntilUpdatedAt
+        ) {
+          reason = "⛔ Ya procesado";
+        } else if (
+          resumeUpdatedAt &&
+          post.updatedAt >= session.lastDiscoveredPostUpdatedAt
+        ) {
+          reason = "🔄 Ya descubierto en esta sesión";
+        }
+
+        console.log(`${reason} | ${post.id} | ${post.updatedAt}`);
+      }
+
+      console.log();
     }
 
-    if (newPosts.posts.length > 0) {
+    if (newPosts.posts.length > 0 || true) {
+      newPosts.posts = pagePosts;
       const newestDiscoveredPost = newPosts.posts[0]!;
       const oldestDiscoveredPost = newPosts.posts.at(-1)!;
 
@@ -143,7 +190,7 @@ export async function scraping() {
       break;
     }
 
-    await sleep(humanDelay() * 1.25);
+    await sleep(humanDelay() / 2);
 
     session.currentPage++;
   } while (
@@ -160,4 +207,6 @@ export async function scraping() {
   });
 
   console.log("🎉 El proceso de scraping ha finalizado.");
+
+  guardarJSON(allPost, "db.json");
 }

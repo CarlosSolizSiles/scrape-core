@@ -175,3 +175,21 @@ export const isDatabaseEmpty = () => {
 
   return row.hasPosts === 0;
 };
+
+/**
+ * Obtiene la cantidad total de posts almacenados.
+ */
+export const getPostsCount = (): number => {
+  const row = db
+    .prepare(
+      `
+      SELECT COUNT(*) AS count
+      FROM posts
+    `,
+    )
+    .get() as {
+    count: number;
+  };
+
+  return row.count;
+};
