@@ -101,11 +101,8 @@ export async function scraping() {
     totalPages: null,
 
     firstDiscoveredPostUpdatedAt,
-    lastDiscoveredPostUpdatedAt:
-      isRunning && resumeUpdatedAt ? resumeUpdatedAt : 0,
+    lastDiscoveredPostUpdatedAt: 0,
   };
-
-  let allPost: Post[][] = [];
 
   do {
     await navigate(`/page/${session.currentPage}/`);
@@ -120,68 +117,29 @@ export async function scraping() {
 
     const { posts: pagePosts, totalPages } = pageData;
 
+    if (!session.firstDiscoveredPostUpdatedAt) {
+      session.firstDiscoveredPostUpdatedAt = Date.now();
+    }
+
     session.totalPages = totalPages;
 
-    const newPosts = getNewPosts(
-      pagePosts,
-      session.lastDiscoveredPostUpdatedAt,
-      processedUntilUpdatedAt,
-    );
-
-    const total = getPostsCount();
-
-    allPost.push(pagePosts);
+    const newPosts = getNewPosts(pagePosts, 0, processedUntilUpdatedAt);
 
     // console.log(total);
 
-    if (pagePosts.length !== 18 || newPosts.posts.length !== 18 || total % 18) {
-      console.log(`\n📄 Página ${session.currentPage}`);
-      console.log(`Total extraídos: ${pagePosts.length}`);
-      console.log(`Nuevos: ${newPosts.posts.length}`);
-      console.log(`Descartados: ${pagePosts.length - newPosts.posts.length}`);
-      console.log(
-        `lastDiscoveredPostUpdatedAt: ${session.lastDiscoveredPostUpdatedAt}`,
-      );
-      console.log(`processedUntilUpdatedAt: ${processedUntilUpdatedAt}`);
-
-      for (const post of pagePosts) {
-        let reason = "✅ Nuevo";
-
-        if (
-          processedUntilUpdatedAt &&
-          post.updatedAt <= processedUntilUpdatedAt
-        ) {
-          reason = "⛔ Ya procesado";
-        } else if (
-          resumeUpdatedAt &&
-          post.updatedAt >= session.lastDiscoveredPostUpdatedAt
-        ) {
-          reason = "🔄 Ya descubierto en esta sesión";
-        }
-
-        console.log(`${reason} | ${post.id} | ${post.updatedAt}`);
-      }
-
-      console.log();
-    }
-
-    if (newPosts.posts.length > 0 || true) {
+    if (newPosts.posts.length > 0) {
       newPosts.posts = pagePosts;
-      const newestDiscoveredPost = newPosts.posts[0]!;
-      const oldestDiscoveredPost = newPosts.posts.at(-1)!;
+      // const newestDiscoveredPost = newPosts.posts[0]!;
+      // const oldestDiscoveredPost = newPosts.posts.at(-1)!;
 
-      session.lastDiscoveredPostUpdatedAt = oldestDiscoveredPost.updatedAt;
-
-      if (!session.firstDiscoveredPostUpdatedAt) {
-        session.firstDiscoveredPostUpdatedAt = newestDiscoveredPost.updatedAt;
-      }
+      // session.lastDiscoveredPostUpdatedAt = oldestDiscoveredPost.updatedAt;
 
       saveDiscoveredPosts(newPosts.posts);
 
       updateMetadata({
         isRunning: true,
         resumePage: session.currentPage,
-        resumeUpdatedAt: session.lastDiscoveredPostUpdatedAt,
+        // resumeUpdatedAt: session.lastDiscoveredPostUpdatedAt,
         firstDiscoveredPostUpdatedAt: session.firstDiscoveredPostUpdatedAt,
       });
     }
@@ -190,7 +148,7 @@ export async function scraping() {
       break;
     }
 
-    await sleep(humanDelay() / 2);
+    await sleep(humanDelay());
 
     session.currentPage++;
   } while (
@@ -208,5 +166,5 @@ export async function scraping() {
 
   console.log("🎉 El proceso de scraping ha finalizado.");
 
-  guardarJSON(allPost, "db.json");
+  // guardarJSON(allPost, "db.json");
 }
