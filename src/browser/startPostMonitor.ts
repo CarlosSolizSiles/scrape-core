@@ -4,10 +4,7 @@ import {
   getMetadata,
   updateMetadata,
 } from "@/database/repositories/MetadataRepository.js";
-import {
-  getPostsCount,
-  saveDiscoveredPosts,
-} from "@/database/repositories/PostRepository.js";
+import { saveDiscoveredPosts } from "@/database/repositories/PostRepository.js";
 
 import { humanDelay, sleep } from "@/lib/time.js";
 
@@ -18,33 +15,19 @@ import {
   type Post,
 } from "./extract/paginationPageData.js";
 import { navigate } from "./navigate.js";
-import fs from "node:fs";
+import { WindowsNative } from "@/native/windows.js";
 
 type ScrapingSession = {
   currentPage: number;
   totalPages: number | null;
 
   firstDiscoveredPostUpdatedAt: Timestamp;
-  lastDiscoveredPostUpdatedAt: Timestamp;
 };
 
 type GetNewPostsResult = {
   posts: Post[];
   reachedProcessedPosts: boolean;
 };
-
-function guardarJSON<T>(array: Array<T>, ruta: string) {
-  fs.writeFileSync(ruta, JSON.stringify(array, null, 4), "utf8");
-}
-
-function cargarJSON(ruta: string) {
-  if (!fs.existsSync(ruta)) {
-    return [];
-  }
-
-  const contenido = fs.readFileSync(ruta, "utf8");
-  return JSON.parse(contenido);
-}
 
 function getNewPosts(
   pagePosts: Post[],
@@ -71,27 +54,10 @@ function getNewPosts(
   };
 }
 
-export async function scraping() {
-  const { page } = state.browser.getManager();
-
-  await page.route("**/*", (route) => {
-    const resourceType = route.request().resourceType();
-
-    if (
-      ["image", "font", "media", "script", "stylesheet", "other"].includes(
-        resourceType,
-      )
-    ) {
-      return route.abort();
-    }
-
-    return route.continue();
-  });
-
+async function syncPosts() {
   const {
     isRunning,
     resumePage,
-    resumeUpdatedAt,
     processedUntilUpdatedAt,
     firstDiscoveredPostUpdatedAt,
   } = getMetadata();
@@ -101,11 +67,10 @@ export async function scraping() {
     totalPages: null,
 
     firstDiscoveredPostUpdatedAt,
-    lastDiscoveredPostUpdatedAt: 0,
   };
 
   do {
-    await navigate(`/page/${session.currentPage}/`);
+    await navigate("scraping", `/page/${session.currentPage}/`);
 
     const pageData = await extractPaginationPageData();
 
@@ -125,21 +90,16 @@ export async function scraping() {
 
     const newPosts = getNewPosts(pagePosts, 0, processedUntilUpdatedAt);
 
-    // console.log(total);
-
     if (newPosts.posts.length > 0) {
       newPosts.posts = pagePosts;
-      // const newestDiscoveredPost = newPosts.posts[0]!;
-      // const oldestDiscoveredPost = newPosts.posts.at(-1)!;
-
-      // session.lastDiscoveredPostUpdatedAt = oldestDiscoveredPost.updatedAt;
 
       saveDiscoveredPosts(newPosts.posts);
+
+      console.log("🥳 se añadio nuevo posts");
 
       updateMetadata({
         isRunning: true,
         resumePage: session.currentPage,
-        // resumeUpdatedAt: session.lastDiscoveredPostUpdatedAt,
         firstDiscoveredPostUpdatedAt: session.firstDiscoveredPostUpdatedAt,
       });
     }
@@ -159,12 +119,49 @@ export async function scraping() {
   updateMetadata({
     isRunning: false,
     resumePage: 0,
-    resumeUpdatedAt: 0,
     processedUntilUpdatedAt: session.firstDiscoveredPostUpdatedAt,
     firstDiscoveredPostUpdatedAt: 0,
   });
 
-  console.log("🎉 El proceso de scraping ha finalizado.");
+  // console.log("🎉 El proceso de scraping ha finalizado.");
 
   // guardarJSON(allPost, "db.json");
+}
+
+function randomInterval() {
+  // 90% de las veces: entre 30 y 60 segundos
+  if (Math.random() < 0.9) {
+    return 30_000 + Math.random() * 30_000;
+  }
+
+  // 10% de las veces: entre 2 y 5 minutos
+  return 120_000 + Math.random() * 180_000;
+}
+
+const loop = async () => {
+  await syncPosts();
+  setTimeout(loop, randomInterval());
+};
+
+export async function startPostMonitor() {
+  console.log("si");
+  const page = await state.browser.createPage("scraping");
+
+  await WindowsNative.hideWindowByTitle(await page.title());
+
+  await page.route("**/*", (route) => {
+    const resourceType = route.request().resourceType();
+
+    if (
+      ["image", "font", "media", "script", "stylesheet", "other"].includes(
+        resourceType,
+      )
+    ) {
+      return route.abort();
+    }
+
+    return route.continue();
+  });
+
+  await loop();
 }

@@ -13,7 +13,7 @@ export interface PaginationPageData {
 
 export const extractPaginationPageData =
   async (): Promise<PaginationPageData | null> => {
-    const { page } = state.browser.getManager();
+    const page = state.browser.getPage("scraping");
 
     return page.evaluate(EvaluatePaginationPageData);
   };

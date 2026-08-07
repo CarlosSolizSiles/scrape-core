@@ -1,24 +1,30 @@
 import { chromium } from "playwright";
-import { createRequire } from "node:module";
 import { state } from "@/core/state.js";
-
-const require = createRequire(import.meta.url);
-const addon = require("../windows_hwnd.node");
+import { WindowsNative } from "@/native/windows.js";
 
 export async function initializePlaywright() {
   const manager = state.browser;
 
   manager.browser = await chromium.launch({
     headless: false,
+    args: ["--lang=en-US"],
   });
 
   manager.context = await manager.browser.newContext({
     baseURL: manager.baseURL,
+    locale: "en-US",
+    extraHTTPHeaders: {
+      "Accept-Language": "en-US,en;q=0.9",
+    },
   });
 
-  manager.page = await manager.context.newPage();
+  await manager.createPage("main");
 
-  const pid = addon.findPidByPartialTitle("about:blank");
+  const pid = WindowsNative.findWindowByTitle("about:blank");
 
-  addon.setWindowVisible(pid, state.isHeadless);
+  // WindowsNative.setWindowVisible(pid, state.isHeadless);
+
+  setInterval(() => {
+    // WindowsNative.setWindowVisible(pid, state.isHeadless);
+  }, 2000);
 }

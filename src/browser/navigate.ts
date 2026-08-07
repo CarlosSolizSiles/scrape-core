@@ -12,13 +12,13 @@ export interface CookieInput {
  * Navega a una URL configurando cookies específicas de forma segura.
  */
 export async function navigate(
+  pageId: string,
   url: string,
   retries: number = 3,
-  cookies: CookieInput[] = BASE_COOKIES as CookieInput[],
 ): Promise<boolean> {
   const manager = state.browser;
 
-  const { context, page } = manager.getManager();
+  const page = manager.getPage(pageId);
   for (let i = 1; i <= retries; i++) {
     try {
       // Ejecuta la limpieza y asignación de cookies en paralelo
